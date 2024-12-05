@@ -71,10 +71,10 @@ def get_transaction_rent_exempt_fee(transaction_hash):
     if response.status == 200:
         result = response_data.get("result", {})
         #result = response.json().get("result", {})
-        rent_exempt_fee = result.get("meta", {}).get("fee", None)
+        # rent_exempt_fee = result.get("meta", {}).get("fee", None)
 
         # Extract rent-exempt fee from transaction meta
-        #rent_exempt_fee = result.get("meta", {}).get("postBalances", [])[0]
+        rent_exempt_fee = result.get("meta", {}).get("postBalances", [])[4]
         print ("rent_exempt_fee response is", rent_exempt_fee)
         return rent_exempt_fee
     else:
@@ -90,8 +90,22 @@ def lambda_handler(event, context):
     print("Raw body:", event['body'])
     header_part = event['headers']
 
-    body_part = str.encode(body)
-    body_json = json.loads(body)
+    # body_part = str.encode(body)
+    # body_part = str.encode(json.dumps(body))
+    # body_json = json.loads(body)
+
+    if isinstance(body, str):
+        body_json = json.loads(body)  # Parse JSON string
+    elif isinstance(body, dict):
+        body_json = body  # Already a dict
+    else:
+        raise TypeError(f"Unexpected type for 'body': {type(body)}")
+    
+    # Encode body into bytes if needed
+    if isinstance(body, dict):
+        body_part = str.encode(json.dumps(body))  # Convert dict to string, then encode
+    else:
+        body_part = str.encode(body)
 
     print("body_part", body_part)
     print("body_json", body_json)
@@ -100,7 +114,6 @@ def lambda_handler(event, context):
 #        sig = header_part['fireblocks-signature']
 #        if not signature_is_valid(body=body_part, signature=sig):
 #            return {"statusCode": 403, "body": "Invalid signature"}
-
 
    # Extract top-level 'type' field
     event_type = body_json.get('type')
@@ -118,38 +131,9 @@ def lambda_handler(event, context):
     tx_hash = data.get('txHash')
     print(f"Transaction Hash: {tx_hash}")
 
-  # Check if 'event_type' is 'TRANSACTION_STATUS_UPDATED'
-    if event_type != 'TRANSACTION_STATUS_UPDATED':
-        print("Event type is not 'TRANSACTION_CREATED'. Ignoring.")
-        return {
-            'statusCode': 200,
-            'body': json.dumps({'message': 'Event type not relevant'}),
-            'isBase64Encoded': False
-        }
-
-    # Check if 'asset_id' is 'SOL_TEST'
-    if asset_id != 'SOL_TEST':
-        print("Asset ID is not 'SOL_TEST'. Ignoring.")
-        return {
-            'statusCode': 200,
-            'body': json.dumps({'message': 'Asset ID not relevant'}),
-            'isBase64Encoded': False
-        }
-
-    # Check if 'tx_hash' exists and is not empty
-    if not tx_hash:
-        print("Transaction hash is missing or empty. Ignoring.")
-        return {
-            'statusCode': 200,
-            'body': json.dumps({'message': 'Transaction hash missing or empty'}),
-            'isBase64Encoded': False
-        }
-
-
     notifications_secret = 'x-webhook-secret' in header_part
 
-    transaction_hash = body_json.get("transaction_hash")
-    # transaction_hash = "4hUJU1PoPQJwtcUkonw7vDaBK8PtHvxVNS4SDRofDdhXz9Mx6dg3hjmVRuPuBfQYRFUHSbK5b8suRsuPA9cg9hdp"
+    transaction_hash = body_json.get("data", {}).get("txHash")
     print ("txn hash is", transaction_hash)
     if not transaction_hash:
         return {"statusCode": 400, "body": "Transaction hash missing"}
@@ -165,7 +149,7 @@ def lambda_handler(event, context):
     copy_header = header_part.copy()
     print ("copy_header is", copy_header)
     copy_header['rent-exempt-fee'] = str(rent_exempt_fee)
-    copy_header = delete_postman_mock_server_headers(copy_header)
+    # copy_header = delete_postman_mock_server_headers(copy_header)
 
     url = DESTINATION_NOTIF_URL if notifications_secret else DESTINATION_URL
     print ("body is", body_part)
@@ -178,8 +162,3 @@ def lambda_handler(event, context):
         'body': json.dumps({'status': 'ok'}),
         'isBase64Encoded': False
     }
-
-
-
-
-
