@@ -77,7 +77,7 @@ def lambda_handler(event, context):
             'body': json.dumps({'message': 'Invalid JSON in request body'}),
             'isBase64Encoded': False
         }
-    
+
     # Prepare body_part for forwarding
     body_part = body.encode('utf-8') if isinstance(body, str) else json.dumps(body).encode('utf-8')
 
@@ -103,27 +103,21 @@ def lambda_handler(event, context):
     # Check conditions
     if not tx_hash:
         print("Transaction hash missing or empty. Exiting.")
-        return {
-            'statusCode': 200,
-            'body': json.dumps({'message': 'Transaction hash missing or empty'}),
-            'isBase64Encoded': False
-        }
+        raise ValueError("Transaction hash is missing or empty.")
 
     if asset_id == 'SOL_USDC_JKVK':
         print(f"Asset ID '{asset_id}' is valid.")
     else:
         print("Asset ID is not valid. Exiting.")
-        return {
-            'statusCode': 200,
-            'body': json.dumps({'message': 'Asset ID not relevant'}),
-            'isBase64Encoded': False
-        }
+        raise ValueError(f"Asset ID '{asset_id}' is not relevant or invalid.")
 
     print("Conditions met. Proceeding with processing.")
 
     # Proceed to get transaction details
     try:
         rent_exempt_fee = get_transaction_rent_exempt_fee(tx_hash)
+        if rent_exempt_fee is None:
+            raise ValueError("Rent-exempt fee is None, indicating unexpected input or condition failure.")
     except Exception as e:
         print(f"Error fetching transaction details: {e}")
         return {
@@ -158,6 +152,8 @@ def lambda_handler(event, context):
             'body': f"Error connecting to destination URL: {str(e)}",
             'isBase64Encoded': False
         }
+    if response.status != 200:
+        raise RuntimeError(f"Unexpected status code from destination URL: {response.status}")
 
     return {
         'statusCode': response.status,
